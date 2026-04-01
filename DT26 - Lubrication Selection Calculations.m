@@ -1,63 +1,44 @@
+%Mercon V, SAE 5W-30, SAE 75W-90, Redline Superlight shockproof
+
 % hmin initialization
 gearTorque = 52; %N*m
 gearPressureAngle = 20; % angle in degrees
 
-%SAE 30 - abs visc for worst case
-absolute_Viscosity = 0.0141 * 10^-6; %abs viscosity u_0 
-equation_Constant = 1360; %equation constant for respective SAE rating (farenheit)
-highest_temperature = 100; %celsius - for worst case scenario
-
+%lube values
+lubeNames = ["Mercon 5", "Redline Superlight Shockproof", "SAE 5W-30", "SAE 75W-90"];
+absolute_Viscosity = [7.5, 12, 10.5, 15.7]; %abs viscosity u_0  cST (centistokes), lowest ranges taken to be conservative
+highest_temperature = 100; %celsius - conservative value
+hmin = zeros(1,length(absolute_Viscosity));
+RPM = 20000; %rotations per min
 
 sun_Gear_PD = 18.90;%mm (Pitch Diameter)
+sun_Gear_PD_m = (sun_Gear_PD/2)/1000; %m
 large_Planet_PD = 46.80; %mm (Pitch Diameter)
 
 pressure_Viscosity_Coefficient = 2.3*10^-8; %pressure viscosity coef for mineral oil
 
-
 %----------------------------------------------------------------------------------------------------------------------------------------------------
-%Variable Viscosity Calcs
-% Sierag - Dandage values
-
-c = [40, 60, 80, 100, 120]; %temp (degrees Celsius)
-
-%SAE 30
-
-u_0 = 0.0141 * 10^-6; %abs viscosity u_0 
-b = 1360; %equation constant for respective SAE rating (farenheit)
-
-%Sierag-Dandage Equation - viscosity as temp changes (Shigley's)
-b_Celsius = (b - 32) * (5 / 9); %farenheit to celsius conversion
-var_Visc = 6.89*(10^6).*u_0 .* exp(b_Celsius./(1.8*c + 127));
-
-%plot
-plot(c,var_Visc, "g");
-grid on;
-title('Viscosity vs. Temperature (Sierag-Dandage)');
-xlabel('Temperature (^{\circ}C)');
-ylabel('Viscosity (\mu)');
-
-%----------------------------------------------------------------------------------------------------------------------------------------------------
-
-%absolute viscosity calcs
-equation_Constant_Conv = (equation_Constant - 32) * (5 / 9); %farenheit to celsius conversion
-abs_Visc = 6.89*(10^6).*absolute_Viscosity .* exp(equation_Constant_Conv./(1.8*highest_temperature + 127));
 
 %PLV calculations
-surface_Velocity = (pi*(sun_Gear_PD*0.001)*large_Planet_PD)/60; % m/s (Pitch Line Velocity)
+surface_Velocity = (pi*(sun_Gear_PD*0.001)*RPM)/60; % m/s (Pitch Line Velocity)
 
 %Effective Radius Calcs
-radii_Curvature_Sun = 0.5*sun_Gear_PD*sin(gearPressureAngle);
-radii_Curvature_Large = 0.5*large_Planet_PD*sin(gearPressureAngle);
-effective_Radius = (radii_Curvature_Sun*radii_Curvature_Large)/(radii_Curvature_Sun+radii_Curvature_Large); %meters
+radii_Curvature_Sun = 0.5*sun_Gear_PD*sind(gearPressureAngle);
+radii_Curvature_Large = 0.5*large_Planet_PD*sind(gearPressureAngle);
+effective_Radius = 0.001*((radii_Curvature_Sun*radii_Curvature_Large)/(radii_Curvature_Sun+radii_Curvature_Large)); %meters
 
 %normal Load calcs
-load = cos(gearPressureAngle)*gearTorque; % Newtons
+load = (gearTorque/sun_Gear_PD_m)/cosd(gearPressureAngle); % Newtons
 
 % hmin calc
-hmin = 1.806 * ((load)^-0.128 * (abs_Visc * surface_Velocity)^0.694 * (pressure_Viscosity_Coefficient)^0.568 * (effective_Radius)^0.434);
+for i=1:length(lubeNames)
+    %SI conversion cST to PaS (centistokes to pascal seconds)
+    absolute_Viscosity_SI = absolute_Viscosity(i)* 850 * 10^-6;
+    hmin(i) = 10^6*(1.806 * ((load)^-0.128 .* (absolute_Viscosity_SI .* surface_Velocity).^0.694 .* (pressure_Viscosity_Coefficient)^0.568 * (effective_Radius)^0.434));
+end
 
 
 %----------------------------------------------------------------------------------------------------------------------------------------------------
 %output
-disp(var_Visc);
-fprintf("h_min: %d",hmin);
+results = table(lubeNames', hmin','VariableNames', {'Lubricant','h_min(microns)'});
+disp (results);
